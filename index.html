@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>売価計算</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, sans-serif; background: #f5f5f5; padding: 16px; max-width: 480px; margin: 0 auto; }
+h1 { font-size: 18px; font-weight: 500; margin-bottom: 20px; color: #333; }
+.tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+.tab { flex: 1; padding: 12px 4px; font-size: 14px; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; color: #666; }
+.tab.active { border-color: #333; color: #333; font-weight: 500; background: #f0f0f0; }
+.card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.field { margin-bottom: 16px; }
+label { font-size: 14px; color: #666; display: block; margin-bottom: 6px; }
+input[type=number] { width: 100%; padding: 12px; font-size: 18px; border: 1px solid #ddd; border-radius: 8px; outline: none; }
+input[type=number]:focus { border-color: #333; }
+.formatted { font-size: 12px; color: #999; margin-top: 4px; min-height: 16px; }
+.results { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.result-item { background: #f5f5f5; border-radius: 8px; padding: 14px; text-align: center; }
+.result-item.highlight { background: #e8f0fe; }
+.result-item.green { background: #e8f5e9; }
+.result-item.wide { grid-column: span 2; }
+.result-label { font-size: 12px; color: #888; margin-bottom: 6px; }
+.result-value { font-size: 24px; font-weight: 500; color: #333; }
+.result-item.highlight .result-value { color: #1a73e8; }
+.result-item.green .result-value { color: #2e7d32; }
+</style>
+</head>
+<body>
+<h1>売価計算ツール</h1>
+
+<div class="tabs">
+  <button class="tab active" id="btn1" onclick="setMode(1)">定価あり</button>
+  <button class="tab" id="btn2" onclick="setMode(2)">オープン価格</button>
+</div>
+
+<!-- モード1: 定価あり -->
+<div id="mode1" class="card">
+  <div class="field">
+    <label>定価（円）</label>
+    <input type="number" id="teika1" placeholder="32200" oninput="showFmt('teika1','fmt_t1'); calc()">
+    <div class="formatted" id="fmt_t1"></div>
+  </div>
+  <div class="field">
+    <label>仕入掛率（%）</label>
+    <input type="number" id="shiire_rate1" placeholder="48" oninput="calc()">
+  </div>
+  <div class="field" style="margin-bottom:0">
+    <label>売上掛率（%）</label>
+    <input type="number" id="sell_rate1" placeholder="55" oninput="calc()">
+  </div>
+</div>
+
+<!-- モード2: オープン価格 -->
+<div id="mode2" class="card" style="display:none">
+  <div class="field">
+    <label>仕入値（円）</label>
+    <input type="number" id="shiire_direct2" placeholder="6000" oninput="showFmt('shiire_direct2','fmt_s2'); calc()">
+    <div class="formatted" id="fmt_s2"></div>
+  </div>
+  <div class="field" style="margin-bottom:0">
+    <label>売価（円）</label>
+    <input type="number" id="baika_input2" placeholder="7000" oninput="showFmt('baika_input2','fmt_b2'); calc()">
+    <div class="formatted" id="fmt_b2"></div>
+  </div>
+</div>
+
+<!-- 結果 -->
+<div class="card">
+  <div class="results">
+    <div class="result-item">
+      <div class="result-label">仕入値</div>
+      <div class="result-value" id="r_shiire">—</div>
+    </div>
+    <div class="result-item highlight">
+      <div class="result-label">売価（税別）</div>
+      <div class="result-value" id="r_baika">—</div>
+    </div>
+    <div class="result-item">
+      <div class="result-label">仕入掛率</div>
+      <div class="result-value" id="r_shiire_rt">—</div>
+    </div>
+    <div class="result-item">
+      <div class="result-label">売上掛率</div>
+      <div class="result-value" id="r_sell_rt">—</div>
+    </div>
+    <div class="result-item green wide">
+      <div class="result-label">粗利率　／　利益額</div>
+      <div class="result-value" id="r_profit">—</div>
+    </div>
+  </div>
+</div>
+
+<script>
+var currentMode = 1;
+
+function showFmt(inputId, fmtId) {
+  var v = parseFloat(document.getElementById(inputId).value);
+  document.getElementById(fmtId).textContent = (!isNaN(v) && v > 0)
+    ? '→ ' + Math.round(v).toLocaleString('ja-JP') + '円' : '';
+}
+
+function setMode(m) {
+  currentMode = m;
+  document.getElementById('mode1').style.display = m===1 ? 'block' : 'none';
+  document.getElementById('mode2').style.display = m===2 ? 'block' : 'none';
+  document.getElementById('btn1').className = 'tab' + (m===1 ? ' active' : '');
+  document.getElementById('btn2').className = 'tab' + (m===2 ? ' active' : '');
+  reset();
+}
+
+function fmt(n) {
+  return Math.round(n).toLocaleString('ja-JP') + '円';
+}
+
+function calc() {
+  if (currentMode === 1) {
+    var teika = parseFloat(document.getElementById('teika1').value);
+    var shiireRt = parseFloat(document.getElementById('shiire_rate1').value);
+    var sellRt = parseFloat(document.getElementById('sell_rate1').value);
+    if (isNaN(teika)) return reset();
+
+    var shiireVal = !isNaN(shiireRt) ? teika * (shiireRt / 100) : null;
+    var baika = !isNaN(sellRt) ? teika * (sellRt / 100) : null;
+    var profitAmt = (shiireVal !== null && baika !== null) ? baika - shiireVal : null;
+    var profitRate = (profitAmt !== null && baika > 0) ? Math.round((profitAmt / baika) * 100) : null;
+
+    document.getElementById('r_shiire').textContent = shiireVal !== null ? fmt(shiireVal) : '—';
+    document.getElementById('r_baika').textContent = baika !== null ? fmt(baika) : '—';
+    document.getElementById('r_shiire_rt').textContent = !isNaN(shiireRt) ? Math.round(shiireRt) + '%' : '—';
+    document.getElementById('r_sell_rt').textContent = !isNaN(sellRt) ? Math.round(sellRt) + '%' : '—';
+    document.getElementById('r_profit').textContent = (profitRate !== null && profitAmt !== null)
+      ? profitRate + '%　／　' + fmt(profitAmt) : '—';
+
+  } else {
+    var shiireVal2 = parseFloat(document.getElementById('shiire_direct2').value);
+    var baika2 = parseFloat(document.getElementById('baika_input2').value);
+    if (isNaN(shiireVal2) || isNaN(baika2)) return reset();
+
+    var profitAmt2 = baika2 - shiireVal2;
+    var profitRate2 = Math.round((profitAmt2 / baika2) * 100);
+
+    document.getElementById('r_shiire').textContent = fmt(shiireVal2);
+    document.getElementById('r_baika').textContent = fmt(baika2);
+    document.getElementById('r_shiire_rt').textContent = '—';
+    document.getElementById('r_sell_rt').textContent = '—';
+    document.getElementById('r_profit').textContent = profitRate2 + '%　／　' + fmt(profitAmt2);
+  }
+}
+
+function reset() {
+  ['r_shiire','r_baika','r_shiire_rt','r_sell_rt','r_profit'].forEach(function(id){
+    document.getElementById(id).textContent = '—';
+  });
+}
+</script>
+</body>
+</html>
